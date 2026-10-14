@@ -1,12 +1,38 @@
 # Modelo-relacional-viveros
 
+## Diagrama del Modelo Relacional en DBeaver
+
 ![](./imagen.png)
+
+## Diagrama entidad-relación
 
 ![](./Diagrama%20sin%20título.drawio.png)
 
 ## Select de tablas
 
 #### Ventas completas: Pedido + Cliente + Empleado + Contiene + Producto
+
+```sql
+SELECT 
+    p.numero_pedido,
+    p.fecha AS fecha_pedido,
+    c.dni_cliente,
+    c.nombre AS nombre_cliente,
+    c.tajinaste_plus,
+    c.bonificaciones,
+    e.nombre AS empleado_responsable,
+    pr.nombre AS producto,
+    pr.tipo AS categoria_producto,
+    co.cantidad,
+    co.precio_unitario,
+    (co.cantidad * co.precio_unitario) AS importe_linea
+FROM pedido p
+INNER JOIN cliente c ON p.dni_cliente = c.dni_cliente
+INNER JOIN empleado e ON p.dni_empleado = e.dni_empleado
+INNER JOIN contiene co ON p.numero_pedido = co.numero_pedido
+INNER JOIN producto pr ON co.id_producto = pr.id_producto
+ORDER BY p.numero_pedido;
+```
 
 ```
  numero_pedido | fecha_pedido | dni_cliente |   nombre_cliente   | tajinaste_plus | bonificaciones | empleado_responsable |           producto            | categoria_producto | cantidad | precio_unitario | importe_linea 
@@ -22,6 +48,23 @@
 
 #### Histórico de empleados: Pertenece_historico + Empleado + Vivero + Zona + Tarea
 
+```sql
+SELECT 
+    e.dni_empleado,
+    e.nombre AS empleado,
+    v.nombre AS vivero,
+    z.nombre AS zona,
+    t.nombre_tarea AS tarea_realizada,
+    ph.fecha_inicio,
+    COALESCE(ph.fecha_fin::TEXT, 'ACTIVO') AS fecha_fin
+FROM pertenece_historico ph
+INNER JOIN empleado e ON ph.dni_empleado = e.dni_empleado
+INNER JOIN zona z ON ph.id_vivero = z.id_vivero AND ph.id_zona = z.id_zona
+INNER JOIN vivero v ON z.id_vivero = v.id_vivero
+INNER JOIN tarea t ON ph.id_tarea = t.id_tarea
+ORDER BY e.nombre, ph.fecha_inicio;
+```
+
 ```
  dni_empleado |      empleado      |      vivero       |           zona           |     tarea_realizada      | fecha_inicio | fecha_fin  
 --------------+--------------------+-------------------+--------------------------+--------------------------+--------------+------------
@@ -35,6 +78,23 @@
 ```
 
 #### Stock de productos: Dispone + Producto + Vivero + Zona
+
+```sql
+SELECT 
+    v.nombre AS vivero,
+    z.nombre AS zona,
+    z.latitud,
+    z.longitud,
+    pr.nombre AS producto,
+    pr.tipo,
+    pr.precio,
+    d.stock AS unidades_disponibles
+FROM dispone d
+INNER JOIN zona z ON d.id_vivero = z.id_vivero AND d.id_zona = z.id_zona
+INNER JOIN vivero v ON z.id_vivero = v.id_vivero
+INNER JOIN producto pr ON d.id_producto = pr.id_producto
+ORDER BY v.nombre, z.nombre;
+```
 
 ```
       vivero       |           zona           |  latitud  |  longitud  |           producto            |    tipo    | precio | unidades_disponibles 
@@ -189,3 +249,44 @@
              5 |           1 |        5 |           18.50
 (6 rows)
 ```
+
+## Borrado en Cascada de una Entidad Fuerte hacia su Entidad Débil
+
+Como **`zona`** es una entidad débil respecto a **`vivero`**, y tanto **`dispone`** como **`pertenece_historico`** dependen de zona, al eliminar el **Vivero Santa Cruz**, el sistema elimina en cascada:
+
+1. El registro del vivero `4` en la tabla `vivero`.
+2. Su zona asociada `(4, 1) - Almacén Logístico` en la tabla `zona`.
+3. El stock alojado en esa zona `(4, 1, 4)` en la tabla `dispone`.
+4. La asignación del empleado `55555555E` en esa zona dentro de `pertenece_historico`.
+
+```sql
+DELETE FROM vivero WHERE id_vivero = 4;
+```
+
+Comprobación en `zona` y `dispone` tras el borrado (la zona `4, 1` y su stock han desaparecido automáticamente):
+
+```text
+ id_vivero | id_zona |          nombre          |  latitud  |  longitud  
+-----------+---------+--------------------------+-----------+------------
+         1 |       1 | Zona Exterior            | 28.487200 | -16.316900
+         1 |       2 | Almacén Central          | 28.487300 | -16.317000
+         2 |       1 | Invernadero Subtropical  | 28.390600 | -16.523100
+         2 |       2 | Exposición Decoración    | 28.390700 | -16.523200
+         3 |       1 | Zona Cactus y Suculentas | 28.122800 | -16.726100
+(5 rows)
+```
+
+## Resumen de la Estructura del Modelo Relacional
+
+1. **Entidades Fuertes (`vivero`, `producto`, `tarea`, `empleado`, `cliente`, `pedido`):**
+
+2. **Entidad Débil por Identificación (`zona`):**
+   * La entidad `zona` no puede existir sin un `vivero` al que pertenezca, por lo que su clave primaria es compuesta por `id_vivero` y `id_zona`.
+
+3. **Relaciones Muchos a Muchos (`N:M`) transformadas en tablas (`dispone`, `pertenece_historico`, `contiene`):**
+   * La relación entre `zona` y `producto` se modela mediante la tabla `dispone`, que registra el stock disponible en cada zona.
+   * La relación entre `empleado`, `zona` y `tarea` se modela mediante la tabla `pertenece_historico`, que controla las asignaciones de trabajadores a zonas y tareas a lo largo del tiempo.
+   * La relación entre `pedido` y `producto` se modela mediante la tabla `contiene`, que registra los artículos incluidos en cada pedido.
+
+4. **Atributos Derivados (Calculados):**
+      * En la tabla **`cliente`**, el atributo **`bonificaciones`** se ha implementado como una columna generada automáticamente. Si el cliente pertenece al programa Tajinaste Plus, calcula automáticamente el **5%** de su `volumen_compras_mensual`; en caso contrario, asigna `0.00`.
