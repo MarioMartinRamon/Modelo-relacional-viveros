@@ -222,3 +222,7 @@ INSERT INTO contiene (numero_pedido, id_producto, cantidad, precio_unitario) VAL
 (3, 4, 2, 15.75),
 (4, 5, 4, 22.00),
 (5, 1, 5, 18.50);
+
+DELETE FROM vivero WHERE id_vivero = 4;
+
+DELETE FROM cliente WHERE dni_cliente = '34567890C';

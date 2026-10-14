@@ -1,6 +1,6 @@
 # Modelo-relacional-viveros
 
-![Diagrama del modelo relacional](./imagen.png)
+![](./imagen.png)
 
 ![](./Diagrama%20sin%20título.drawio.png)
 
